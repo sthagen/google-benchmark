@@ -1,9 +1,13 @@
 # Benchmark
 
+[![build-and-test](https://github.com/google/benchmark/workflows/build-and-test/badge.svg)](https://github.com/google/benchmark/actions?query=workflow%3Abuild-and-test)
+[![pylint](https://github.com/google/benchmark/workflows/pylint/badge.svg)](https://github.com/google/benchmark/actions?query=workflow%3Apylint)
+[![test-bindings](https://github.com/google/benchmark/workflows/test-bindings/badge.svg)](https://github.com/google/benchmark/actions?query=workflow%3Atest-bindings)
+
 [![Build Status](https://travis-ci.org/google/benchmark.svg?branch=master)](https://travis-ci.org/google/benchmark)
 [![Build status](https://ci.appveyor.com/api/projects/status/u0qsyp7t1tk7cpxs/branch/master?svg=true)](https://ci.appveyor.com/project/google/benchmark/branch/master)
 [![Coverage Status](https://coveralls.io/repos/google/benchmark/badge.svg)](https://coveralls.io/r/google/benchmark)
-[![slackin](https://slackin-iqtfqnpzxd.now.sh/badge.svg)](https://slackin-iqtfqnpzxd.now.sh/)
+
 
 A library to benchmark code snippets, similar to unit tests. Example:
 
@@ -546,6 +550,29 @@ pair.
 
 ```c++
 BENCHMARK(BM_SetInsert)->Ranges({{1<<10, 8<<10}, {128, 512}});
+```
+
+Some benchmarks may require specific argument values that cannot be expressed
+with `Ranges`. In this case, `ArgsProduct` offers the ability to generate a
+benchmark input for each combination in the product of the supplied vectors.
+
+```c++
+BENCHMARK(BM_SetInsert)
+    ->ArgsProduct({{1<<10, 3<<10, 8<<10}, {20, 40, 60, 80}})
+// would generate the same benchmark arguments as
+BENCHMARK(BM_SetInsert)
+    ->Args({1<<10, 20})
+    ->Args({3<<10, 20})
+    ->Args({8<<10, 20})
+    ->Args({3<<10, 40})
+    ->Args({8<<10, 40})
+    ->Args({1<<10, 40})
+    ->Args({1<<10, 60})
+    ->Args({3<<10, 60})
+    ->Args({8<<10, 60})
+    ->Args({1<<10, 80})
+    ->Args({3<<10, 80})
+    ->Args({8<<10, 80});
 ```
 
 For more complex patterns of inputs, passing a custom function to `Apply` allows

@@ -92,7 +92,7 @@ inline BENCHMARK_ALWAYS_INLINE int64_t Now() {
   uint32_t tbl, tbu0, tbu1;
   asm volatile(
       "mftbu %0\n"
-      "mftbl %1\n"
+      "mftb %1\n"
       "mftbu %2"
       : "=r"(tbu0), "=r"(tbl), "=r"(tbu1));
   tbl &= -static_cast<int32_t>(tbu0 == tbu1);
@@ -161,7 +161,7 @@ inline BENCHMARK_ALWAYS_INLINE int64_t Now() {
   struct timeval tv;
   gettimeofday(&tv, nullptr);
   return static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
-#elif defined(__mips__)
+#elif defined(__mips__) || defined(__m68k__)
   // mips apparently only allows rdtsc for superusers, so we fall
   // back to gettimeofday.  It's possible clock_gettime would be better.
   struct timeval tv;
@@ -170,7 +170,12 @@ inline BENCHMARK_ALWAYS_INLINE int64_t Now() {
 #elif defined(__s390__)  // Covers both s390 and s390x.
   // Return the CPU clock.
   uint64_t tsc;
+#if defined(BENCHMARK_OS_ZOS) && defined(COMPILER_IBMXL)
+  // z/OS XL compiler HLASM syntax.
+  asm(" stck %0" : "=m"(tsc) : : "cc");
+#else
   asm("stck %0" : "=Q"(tsc) : : "cc");
+#endif
   return tsc;
 #elif defined(__riscv) // RISC-V
   // Use RDCYCLE (and RDCYCLEH on riscv32)
