@@ -1,6 +1,7 @@
 # Benchmark
 
 [![build-and-test](https://github.com/google/benchmark/workflows/build-and-test/badge.svg)](https://github.com/google/benchmark/actions?query=workflow%3Abuild-and-test)
+[![bazel](https://github.com/google/benchmark/actions/workflows/bazel.yml/badge.svg)](https://github.com/google/benchmark/actions/workflows/bazel.yml)
 [![pylint](https://github.com/google/benchmark/workflows/pylint/badge.svg)](https://github.com/google/benchmark/actions?query=workflow%3Apylint)
 [![test-bindings](https://github.com/google/benchmark/workflows/test-bindings/badge.svg)](https://github.com/google/benchmark/actions?query=workflow%3Atest-bindings)
 
@@ -31,7 +32,7 @@ To get started, see [Requirements](#requirements) and
 [Installation](#installation). See [Usage](#usage) for a full example and the
 [User Guide](#user-guide) for a more comprehensive feature overview.
 
-It may also help to read the [Google Test documentation](https://github.com/google/googletest/blob/master/googletest/docs/primer.md)
+It may also help to read the [Google Test documentation](https://github.com/google/googletest/blob/master/docs/primer.md)
 as some of the structural aspects of the APIs are similar.
 
 ### Resources
@@ -278,6 +279,8 @@ too (`-lkstat`).
 
 [Passing Arguments](#passing-arguments)
 
+[Custom Benchmark Name](#custom-benchmark-name)
+
 [Calculating Asymptotic Complexity](#asymptotic-complexity)
 
 [Templated Benchmarks](#templated-benchmarks)
@@ -391,8 +394,12 @@ name,iterations,real_time,cpu_time,bytes_per_second,items_per_second,label
 Write benchmark results to a file with the `--benchmark_out=<filename>` option
 (or set `BENCHMARK_OUT`). Specify the output format with
 `--benchmark_out_format={json|console|csv}` (or set
-`BENCHMARK_OUT_FORMAT={json|console|csv}`). Note that specifying
-`--benchmark_out` does not suppress the console output.
+`BENCHMARK_OUT_FORMAT={json|console|csv}`). Note that the 'csv' reporter is
+deprecated and the saved `.csv` file 
+[is not parsable](https://github.com/google/benchmark/issues/794) by csv 
+parsers.
+
+Specifying `--benchmark_out` does not suppress the console output.
 
 <a name="running-benchmarks" />
 
@@ -647,6 +654,19 @@ that might be used to customize high-order term calculation.
 BENCHMARK(BM_StringCompare)->RangeMultiplier(2)
     ->Range(1<<10, 1<<18)->Complexity([](benchmark::IterationCount n)->double{return n; });
 ```
+
+<a name="custom-benchmark-name" />
+
+### Custom Benchmark Name
+
+You can change the benchmark's name as follows:
+
+```c++
+BENCHMARK(BM_memcpy)->Name("memcpy")->RangeMultiplier(2)->Range(8, 8<<10);
+```
+
+The invocation will execute the benchmark as before using `BM_memcpy` but changes
+the prefix in the report to `memcpy`.
 
 <a name="templated-benchmarks" />
 
