@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cinttypes>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -34,11 +35,6 @@
 #include <numeric>
 #include <sstream>
 #include <thread>
-
-#ifndef __STDC_FORMAT_MACROS
-#define __STDC_FORMAT_MACROS
-#endif
-#include <inttypes.h>
 
 #include "benchmark/benchmark.h"
 #include "benchmark_api_internal.h"
@@ -133,8 +129,13 @@ bool BenchmarkFamilies::FindBenchmarks(
   // Special list of thread counts to use when none are specified
   const std::vector<int> one_thread = {1};
 
+  int next_family_index = 0;
+
   MutexLock l(mutex_);
   for (std::unique_ptr<Benchmark>& family : families_) {
+    int family_index = next_family_index;
+    int per_family_instance_index = 0;
+
     // Family was deleted or benchmark doesn't match
     if (!family) continue;
 
@@ -154,84 +155,24 @@ bool BenchmarkFamilies::FindBenchmarks(
     }
     // reserve in the special case the regex ".", since we know the final
     // family size.
-    if (spec == ".") benchmarks->reserve(family_size);
+    if (spec == ".") benchmarks->reserve(benchmarks->size() + family_size);
 
     for (auto const& args : family->args_) {
       for (int num_threads : *thread_counts) {
-        BenchmarkInstance instance;
-        instance.name.function_name = family->name_;
-        instance.benchmark = family.get();
-        instance.aggregation_report_mode = family->aggregation_report_mode_;
-        instance.arg = args;
-        instance.time_unit = family->time_unit_;
-        instance.range_multiplier = family->range_multiplier_;
-        instance.min_time = family->min_time_;
-        instance.iterations = family->iterations_;
-        instance.repetitions = family->repetitions_;
-        instance.measure_process_cpu_time = family->measure_process_cpu_time_;
-        instance.use_real_time = family->use_real_time_;
-        instance.use_manual_time = family->use_manual_time_;
-        instance.complexity = family->complexity_;
-        instance.complexity_lambda = family->complexity_lambda_;
-        instance.statistics = &family->statistics_;
-        instance.threads = num_threads;
+        BenchmarkInstance instance(family.get(), family_index,
+                                   per_family_instance_index, args,
+                                   num_threads);
 
-        // Add arguments to instance name
-        size_t arg_i = 0;
-        for (auto const& arg : args) {
-          if (!instance.name.args.empty()) {
-            instance.name.args += '/';
-          }
-
-          if (arg_i < family->arg_names_.size()) {
-            const auto& arg_name = family->arg_names_[arg_i];
-            if (!arg_name.empty()) {
-              instance.name.args += StrFormat("%s:", arg_name.c_str());
-            }
-          }
-
-          instance.name.args += StrFormat("%" PRId64, arg);
-          ++arg_i;
-        }
-
-        if (!IsZero(family->min_time_))
-          instance.name.min_time =
-              StrFormat("min_time:%0.3f", family->min_time_);
-        if (family->iterations_ != 0) {
-          instance.name.iterations =
-              StrFormat("iterations:%lu",
-                        static_cast<unsigned long>(family->iterations_));
-        }
-        if (family->repetitions_ != 0)
-          instance.name.repetitions =
-              StrFormat("repeats:%d", family->repetitions_);
-
-        if (family->measure_process_cpu_time_) {
-          instance.name.time_type = "process_time";
-        }
-
-        if (family->use_manual_time_) {
-          if (!instance.name.time_type.empty()) {
-            instance.name.time_type += '/';
-          }
-          instance.name.time_type += "manual_time";
-        } else if (family->use_real_time_) {
-          if (!instance.name.time_type.empty()) {
-            instance.name.time_type += '/';
-          }
-          instance.name.time_type += "real_time";
-        }
-
-        // Add the number of threads used to the name
-        if (!family->thread_counts_.empty()) {
-          instance.name.threads = StrFormat("threads:%d", instance.threads);
-        }
-
-        const auto full_name = instance.name.str();
+        const auto full_name = instance.name().str();
         if ((re.Match(full_name) && !isNegativeFilter) ||
             (!re.Match(full_name) && isNegativeFilter)) {
-          instance.last_benchmark_instance = (&args == &family->args_.back());
           benchmarks->push_back(std::move(instance));
+
+          ++per_family_instance_index;
+
+          // Only bump the next family index once we've estabilished that
+          // at least one instance of this family will be run.
+          if (next_family_index == family_index) ++next_family_index;
         }
       }
     }

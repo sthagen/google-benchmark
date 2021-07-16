@@ -82,7 +82,6 @@ std::string GetBigOString(BigO complexity) {
 LeastSq MinimalLeastSq(const std::vector<int64_t>& n,
                        const std::vector<double>& time,
                        BigOFunc* fitting_curve) {
-  double sigma_gn = 0.0;
   double sigma_gn_squared = 0.0;
   double sigma_time = 0.0;
   double sigma_time_gn = 0.0;
@@ -90,7 +89,6 @@ LeastSq MinimalLeastSq(const std::vector<int64_t>& n,
   // Calculate least square fitting parameter
   for (size_t i = 0; i < n.size(); ++i) {
     double gn_i = fitting_curve(n[i]);
-    sigma_gn += gn_i;
     sigma_gn_squared += gn_i * gn_i;
     sigma_time += time[i];
     sigma_time_gn += time[i] * gn_i;
@@ -193,6 +191,8 @@ std::vector<BenchmarkReporter::Run> ComputeBigO(
   // Get the data from the accumulator to BenchmarkReporter::Run's.
   Run big_o;
   big_o.run_name = run_name;
+  big_o.family_index = reports[0].family_index;
+  big_o.per_family_instance_index = reports[0].per_family_instance_index;
   big_o.run_type = BenchmarkReporter::Run::RT_Aggregate;
   big_o.repetitions = reports[0].repetitions;
   big_o.repetition_index = Run::no_repetition_index;
@@ -215,6 +215,8 @@ std::vector<BenchmarkReporter::Run> ComputeBigO(
   // Only add label to mean/stddev if it is same for all runs
   Run rms;
   rms.run_name = run_name;
+  rms.family_index = reports[0].family_index;
+  rms.per_family_instance_index = reports[0].per_family_instance_index;
   rms.run_type = BenchmarkReporter::Run::RT_Aggregate;
   rms.aggregate_name = "RMS";
   rms.report_label = big_o.report_label;

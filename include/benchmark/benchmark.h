@@ -42,6 +42,7 @@ BENCHMARK(BM_StringCopy);
 int main(int argc, char** argv) {
   benchmark::Initialize(&argc, argv);
   benchmark::RunSpecifiedBenchmarks();
+  benchmark::Shutdown();
   return 0;
 }
 
@@ -263,11 +264,18 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #define BENCHMARK_UNREACHABLE() ((void)0)
 #endif
 
+#ifdef BENCHMARK_HAS_CXX11
+#define BENCHMARK_OVERRIDE override
+#else
+#define BENCHMARK_OVERRIDE
+#endif
+
 namespace benchmark {
 class BenchmarkReporter;
 class MemoryManager;
 
 void Initialize(int* argc, char** argv);
+void Shutdown();
 
 // Report to stdout all arguments in 'argv' as unrecognized except the first.
 // Returns true there is at least on unrecognized argument (i.e. 'argc' > 1).
@@ -293,6 +301,9 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
 // Register a MemoryManager instance that will be used to collect and report
 // allocation measurements for benchmark runs.
 void RegisterMemoryManager(MemoryManager* memory_manager);
+
+// Add a key-value pair to output as part of the context stanza in the report.
+void AddCustomContext(const std::string& key, const std::string& value);
 
 namespace internal {
 class Benchmark;
@@ -445,9 +456,10 @@ struct Statistics {
       : name_(name), compute_(compute) {}
 };
 
-struct BenchmarkInstance;
+class BenchmarkInstance;
 class ThreadTimer;
 class ThreadManager;
+class PerfCountersMeasurement;
 
 enum AggregationReportMode
 #if defined(BENCHMARK_HAS_CXX11)
@@ -687,17 +699,19 @@ class State {
  private:
   State(IterationCount max_iters, const std::vector<int64_t>& ranges,
         int thread_i, int n_threads, internal::ThreadTimer* timer,
-        internal::ThreadManager* manager);
+        internal::ThreadManager* manager,
+        internal::PerfCountersMeasurement* perf_counters_measurement);
 
   void StartKeepRunning();
   // Implementation of KeepRunning() and KeepRunningBatch().
   // is_batch must be true unless n is 1.
   bool KeepRunningInternal(IterationCount n, bool is_batch);
   void FinishKeepRunning();
-  internal::ThreadTimer* timer_;
-  internal::ThreadManager* manager_;
+  internal::ThreadTimer* const timer_;
+  internal::ThreadManager* const manager_;
+  internal::PerfCountersMeasurement* const perf_counters_measurement_;
 
-  friend struct internal::BenchmarkInstance;
+  friend class internal::BenchmarkInstance;
 };
 
 inline BENCHMARK_ALWAYS_INLINE bool State::KeepRunning() {
@@ -975,6 +989,7 @@ class Benchmark {
 
  private:
   friend class BenchmarkFamilies;
+  friend class BenchmarkInstance;
 
   std::string name_;
   AggregationReportMode aggregation_report_mode_;
@@ -1022,7 +1037,7 @@ class FunctionBenchmark : public Benchmark {
   FunctionBenchmark(const char* name, Function* func)
       : Benchmark(name), func_(func) {}
 
-  virtual void Run(State& st);
+  virtual void Run(State& st) BENCHMARK_OVERRIDE;
 
  private:
   Function* func_;
@@ -1032,7 +1047,7 @@ class FunctionBenchmark : public Benchmark {
 template <class Lambda>
 class LambdaBenchmark : public Benchmark {
  public:
-  virtual void Run(State& st) { lambda_(st); }
+  virtual void Run(State& st) BENCHMARK_OVERRIDE { lambda_(st); }
 
  private:
   template <class OLambda>
@@ -1084,7 +1099,7 @@ class Fixture : public internal::Benchmark {
  public:
   Fixture() : internal::Benchmark("") {}
 
-  virtual void Run(State& st) {
+  virtual void Run(State& st) BENCHMARK_OVERRIDE {
     this->SetUp(st);
     this->BenchmarkCase(st);
     this->TearDown(st);
@@ -1117,7 +1132,7 @@ class Fixture : public internal::Benchmark {
 
 // Helpers for generating unique variable names
 #define BENCHMARK_PRIVATE_NAME(n) \
-  BENCHMARK_PRIVATE_CONCAT(_benchmark_, BENCHMARK_PRIVATE_UNIQUE_ID, n)
+  BENCHMARK_PRIVATE_CONCAT(benchmark_uniq_, BENCHMARK_PRIVATE_UNIQUE_ID, n)
 #define BENCHMARK_PRIVATE_CONCAT(a, b, c) BENCHMARK_PRIVATE_CONCAT2(a, b, c)
 #define BENCHMARK_PRIVATE_CONCAT2(a, b, c) a##b##c
 // Helper for concatenation with macro name expansion
@@ -1192,37 +1207,37 @@ class Fixture : public internal::Benchmark {
 #define BENCHMARK_TEMPLATE(n, a) BENCHMARK_TEMPLATE1(n, a)
 #endif
 
-#define BENCHMARK_PRIVATE_DECLARE_F(BaseClass, Method)        \
-  class BaseClass##_##Method##_Benchmark : public BaseClass { \
-   public:                                                    \
-    BaseClass##_##Method##_Benchmark() : BaseClass() {        \
-      this->SetName(#BaseClass "/" #Method);                  \
-    }                                                         \
-                                                              \
-   protected:                                                 \
-    virtual void BenchmarkCase(::benchmark::State&);          \
+#define BENCHMARK_PRIVATE_DECLARE_F(BaseClass, Method)                  \
+  class BaseClass##_##Method##_Benchmark : public BaseClass {           \
+   public:                                                              \
+    BaseClass##_##Method##_Benchmark() : BaseClass() {                  \
+      this->SetName(#BaseClass "/" #Method);                            \
+    }                                                                   \
+                                                                        \
+   protected:                                                           \
+    virtual void BenchmarkCase(::benchmark::State&) BENCHMARK_OVERRIDE; \
   };
 
-#define BENCHMARK_TEMPLATE1_PRIVATE_DECLARE_F(BaseClass, Method, a) \
-  class BaseClass##_##Method##_Benchmark : public BaseClass<a> {    \
-   public:                                                          \
-    BaseClass##_##Method##_Benchmark() : BaseClass<a>() {           \
-      this->SetName(#BaseClass "<" #a ">/" #Method);                \
-    }                                                               \
-                                                                    \
-   protected:                                                       \
-    virtual void BenchmarkCase(::benchmark::State&);                \
+#define BENCHMARK_TEMPLATE1_PRIVATE_DECLARE_F(BaseClass, Method, a)     \
+  class BaseClass##_##Method##_Benchmark : public BaseClass<a> {        \
+   public:                                                              \
+    BaseClass##_##Method##_Benchmark() : BaseClass<a>() {               \
+      this->SetName(#BaseClass "<" #a ">/" #Method);                    \
+    }                                                                   \
+                                                                        \
+   protected:                                                           \
+    virtual void BenchmarkCase(::benchmark::State&) BENCHMARK_OVERRIDE; \
   };
 
-#define BENCHMARK_TEMPLATE2_PRIVATE_DECLARE_F(BaseClass, Method, a, b) \
-  class BaseClass##_##Method##_Benchmark : public BaseClass<a, b> {    \
-   public:                                                             \
-    BaseClass##_##Method##_Benchmark() : BaseClass<a, b>() {           \
-      this->SetName(#BaseClass "<" #a "," #b ">/" #Method);            \
-    }                                                                  \
-                                                                       \
-   protected:                                                          \
-    virtual void BenchmarkCase(::benchmark::State&);                   \
+#define BENCHMARK_TEMPLATE2_PRIVATE_DECLARE_F(BaseClass, Method, a, b)  \
+  class BaseClass##_##Method##_Benchmark : public BaseClass<a, b> {     \
+   public:                                                              \
+    BaseClass##_##Method##_Benchmark() : BaseClass<a, b>() {            \
+      this->SetName(#BaseClass "<" #a "," #b ">/" #Method);             \
+    }                                                                   \
+                                                                        \
+   protected:                                                           \
+    virtual void BenchmarkCase(::benchmark::State&) BENCHMARK_OVERRIDE; \
   };
 
 #ifdef BENCHMARK_HAS_CXX11
@@ -1234,7 +1249,7 @@ class Fixture : public internal::Benchmark {
     }                                                                      \
                                                                            \
    protected:                                                              \
-    virtual void BenchmarkCase(::benchmark::State&);                       \
+    virtual void BenchmarkCase(::benchmark::State&) BENCHMARK_OVERRIDE;    \
   };
 #else
 #define BENCHMARK_TEMPLATE_PRIVATE_DECLARE_F(n, a) \
@@ -1301,6 +1316,8 @@ class Fixture : public internal::Benchmark {
     ::benchmark::Initialize(&argc, argv);                               \
     if (::benchmark::ReportUnrecognizedArguments(argc, argv)) return 1; \
     ::benchmark::RunSpecifiedBenchmarks();                              \
+    ::benchmark::Shutdown();                                            \
+    return 0;                                                           \
   }                                                                     \
   int main(int, char**)
 
@@ -1404,6 +1421,8 @@ class BenchmarkReporter {
 
     std::string benchmark_name() const;
     BenchmarkName run_name;
+    int64_t family_index;
+    int64_t per_family_instance_index;
     RunType run_type;
     std::string aggregate_name;
     std::string report_label;  // Empty if not set by benchmark.
@@ -1451,6 +1470,19 @@ class BenchmarkReporter {
     bool has_memory_result;
     double allocs_per_iter;
     int64_t max_bytes_used;
+  };
+
+  struct PerFamilyRunReports {
+    PerFamilyRunReports() : num_runs_total(0), num_runs_done(0) {}
+
+    // How many runs will all instances of this benchmark perform?
+    int num_runs_total;
+
+    // How many runs have happened already?
+    int num_runs_done;
+
+    // The reports about (non-errneous!) runs of this family.
+    std::vector<BenchmarkReporter::Run> Runs;
   };
 
   // Construct a BenchmarkReporter with the output stream set to 'std::cout'
@@ -1525,8 +1557,8 @@ class ConsoleReporter : public BenchmarkReporter {
         prev_counters_(),
         printed_header_(false) {}
 
-  virtual bool ReportContext(const Context& context);
-  virtual void ReportRuns(const std::vector<Run>& reports);
+  virtual bool ReportContext(const Context& context) BENCHMARK_OVERRIDE;
+  virtual void ReportRuns(const std::vector<Run>& reports) BENCHMARK_OVERRIDE;
 
  protected:
   virtual void PrintRunData(const Run& report);
@@ -1541,9 +1573,9 @@ class ConsoleReporter : public BenchmarkReporter {
 class JSONReporter : public BenchmarkReporter {
  public:
   JSONReporter() : first_report_(true) {}
-  virtual bool ReportContext(const Context& context);
-  virtual void ReportRuns(const std::vector<Run>& reports);
-  virtual void Finalize();
+  virtual bool ReportContext(const Context& context) BENCHMARK_OVERRIDE;
+  virtual void ReportRuns(const std::vector<Run>& reports) BENCHMARK_OVERRIDE;
+  virtual void Finalize() BENCHMARK_OVERRIDE;
 
  private:
   void PrintRunData(const Run& report);
@@ -1556,8 +1588,8 @@ class BENCHMARK_DEPRECATED_MSG(
     : public BenchmarkReporter {
  public:
   CSVReporter() : printed_header_(false) {}
-  virtual bool ReportContext(const Context& context);
-  virtual void ReportRuns(const std::vector<Run>& reports);
+  virtual bool ReportContext(const Context& context) BENCHMARK_OVERRIDE;
+  virtual void ReportRuns(const std::vector<Run>& reports) BENCHMARK_OVERRIDE;
 
  private:
   void PrintRunData(const Run& report);
