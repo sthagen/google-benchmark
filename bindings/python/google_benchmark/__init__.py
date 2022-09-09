@@ -26,6 +26,7 @@ Example usage:
   if __name__ == '__main__':
     benchmark.main()
 """
+import atexit
 
 from absl import app
 from google_benchmark import _benchmark
@@ -44,6 +45,7 @@ from google_benchmark._benchmark import (
     oNLogN,
     oAuto,
     oLambda,
+    State,
 )
 
 
@@ -64,9 +66,10 @@ __all__ = [
     "oNLogN",
     "oAuto",
     "oLambda",
+    "State",
 ]
 
-__version__ = "0.2.0"
+__version__ = "1.7.0"
 
 
 class __OptionMaker:
@@ -156,3 +159,4 @@ def main(argv=None):
 # Methods for use with custom main function.
 initialize = _benchmark.Initialize
 run_benchmarks = _benchmark.RunSpecifiedBenchmarks
+atexit.register(_benchmark.ClearRegisteredBenchmarks)
