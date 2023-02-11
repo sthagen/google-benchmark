@@ -280,6 +280,9 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 namespace benchmark {
 class BenchmarkReporter;
 
+// Default number of minimum benchmark running time in seconds.
+const char kDefaultMinTimeStr[] = "0.5s";
+
 BENCHMARK_EXPORT void PrintDefaultHelp();
 
 BENCHMARK_EXPORT void Initialize(int* argc, char** argv,
@@ -435,6 +438,9 @@ inline BENCHMARK_ALWAYS_INLINE void ClobberMemory() {
 #ifndef BENCHMARK_HAS_NO_INLINE_ASSEMBLY
 #if !defined(__GNUC__) || defined(__llvm__) || defined(__INTEL_COMPILER)
 template <class Tp>
+BENCHMARK_DEPRECATED_MSG(
+    "The const-ref version of this method can permit "
+    "undesired compiler optimizations in benchmarks")
 inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
   asm volatile("" : : "r,m"(value) : "memory");
 }
@@ -451,6 +457,9 @@ inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp& value) {
 // Workaround for a bug with full argument copy overhead with GCC.
 // See: #1340 and https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105519
 template <class Tp>
+BENCHMARK_DEPRECATED_MSG(
+    "The const-ref version of this method can permit "
+    "undesired compiler optimizations in benchmarks")
 inline BENCHMARK_ALWAYS_INLINE
     typename std::enable_if<std::is_trivially_copyable<Tp>::value &&
                             (sizeof(Tp) <= sizeof(Tp*))>::type
@@ -459,6 +468,9 @@ inline BENCHMARK_ALWAYS_INLINE
 }
 
 template <class Tp>
+BENCHMARK_DEPRECATED_MSG(
+    "The const-ref version of this method can permit "
+    "undesired compiler optimizations in benchmarks")
 inline BENCHMARK_ALWAYS_INLINE
     typename std::enable_if<!std::is_trivially_copyable<Tp>::value ||
                             (sizeof(Tp) > sizeof(Tp*))>::type
@@ -487,6 +499,9 @@ inline BENCHMARK_ALWAYS_INLINE
 // to use memory operations instead of operations with registers.
 // TODO: Remove if GCC < 5 will be unsupported.
 template <class Tp>
+BENCHMARK_DEPRECATED_MSG(
+    "The const-ref version of this method can permit "
+    "undesired compiler optimizations in benchmarks")
 inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
   asm volatile("" : : "m"(value) : "memory");
 }
@@ -504,6 +519,9 @@ inline BENCHMARK_ALWAYS_INLINE void ClobberMemory() {
 #endif
 #elif defined(_MSC_VER)
 template <class Tp>
+BENCHMARK_DEPRECATED_MSG(
+    "The const-ref version of this method can permit "
+    "undesired compiler optimizations in benchmarks")
 inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
   internal::UseCharPointer(&reinterpret_cast<char const volatile&>(value));
   _ReadWriteBarrier();
@@ -514,6 +532,9 @@ inline BENCHMARK_ALWAYS_INLINE void ClobberMemory() { _ReadWriteBarrier(); }
 #endif
 #else
 template <class Tp>
+BENCHMARK_DEPRECATED_MSG(
+    "The const-ref version of this method can permit "
+    "undesired compiler optimizations in benchmarks")
 inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
   internal::UseCharPointer(&reinterpret_cast<char const volatile&>(value));
 }
@@ -1081,11 +1102,12 @@ class BENCHMARK_EXPORT Benchmark {
   Benchmark* MinWarmUpTime(double t);
 
   // Specify the amount of iterations that should be run by this benchmark.
+  // This option overrides the `benchmark_min_time` flag.
   // REQUIRES: 'n > 0' and `MinTime` has not been called on this benchmark.
   //
   // NOTE: This function should only be used when *exact* iteration control is
   //   needed and never to control or limit how long a benchmark runs, where
-  // `--benchmark_min_time=N` or `MinTime(...)` should be used instead.
+  // `--benchmark_min_time=<N>s` or `MinTime(...)` should be used instead.
   Benchmark* Iterations(IterationCount n);
 
   // Specify the amount of times to repeat this benchmark. This option overrides
@@ -1361,7 +1383,7 @@ class Fixture : public internal::Benchmark {
   BENCHMARK_PRIVATE_DECLARE(_benchmark_) =                           \
       (::benchmark::internal::RegisterBenchmarkInternal(             \
           new ::benchmark::internal::FunctionBenchmark(#__VA_ARGS__, \
-                                                       &__VA_ARGS__)))
+                                                       __VA_ARGS__)))
 #else
 #define BENCHMARK(n)                                     \
   BENCHMARK_PRIVATE_DECLARE(n) =                         \
@@ -1720,6 +1742,12 @@ class BENCHMARK_EXPORT BenchmarkReporter {
   // never started if this function returns false, allowing the reporter
   // to skip runs based on the context information.
   virtual bool ReportContext(const Context& context) = 0;
+
+  // Called once for each group of benchmark runs, gives information about
+  // the configurations of the runs.
+  virtual void ReportRunsConfig(double /*min_time*/,
+                                bool /*has_explicit_iters*/,
+                                IterationCount /*iters*/) {}
 
   // Called once for each group of benchmark runs, gives information about
   // cpu-time and heap memory usage during the benchmark run. If the group
