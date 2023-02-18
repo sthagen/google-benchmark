@@ -1,18 +1,5 @@
-cmake_minimum_required (VERSION 3.16.3)
-
-foreach(p
-    CMP0048 # OK to clear PROJECT_VERSION on project()
-    CMP0054 # CMake 3.1
-    CMP0056 # export EXE_LINKER_FLAGS to try_run
-    CMP0057 # Support no if() IN_LIST operator
-    CMP0063 # Honor visibility properties for all targets
-    CMP0067 # Honor language standard in try_compile() source file signature
-    CMP0077 # Allow option() overrides in importing projects
-    )
-  if(POLICY ${p})
-    cmake_policy(SET ${p} NEW)
-  endif()
-endforeach()
+# Require CMake 3.10. If available, use the policies up to CMake 3.22.
+cmake_minimum_required (VERSION 3.10...3.22)
 
 project (benchmark VERSION 1.7.1 LANGUAGES CXX)
 
@@ -190,9 +177,7 @@ else()
   add_cxx_compiler_flag(-Wshadow)
   add_cxx_compiler_flag(-Wfloat-equal)
   if(BENCHMARK_ENABLE_WERROR)
-      add_cxx_compiler_flag(-Werror RELEASE)
-      add_cxx_compiler_flag(-Werror RELWITHDEBINFO)
-      add_cxx_compiler_flag(-Werror MINSIZEREL)
+      add_cxx_compiler_flag(-Werror)
   endif()
   if (NOT BENCHMARK_ENABLE_TESTING)
     # Disable warning when compiling tests as gtest does not use 'override'.
@@ -213,9 +198,7 @@ else()
   endif()
   # Disable deprecation warnings for release builds (when -Werror is enabled).
   if(BENCHMARK_ENABLE_WERROR)
-      add_cxx_compiler_flag(-Wno-deprecated RELEASE)
-      add_cxx_compiler_flag(-Wno-deprecated RELWITHDEBINFO)
-      add_cxx_compiler_flag(-Wno-deprecated MINSIZEREL)
+      add_cxx_compiler_flag(-Wno-deprecated)
   endif()
   if (NOT BENCHMARK_ENABLE_EXCEPTIONS)
     add_cxx_compiler_flag(-fno-exceptions)
