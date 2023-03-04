@@ -40,26 +40,40 @@ TEST(PerfCountersTest, NegativeTest) {
   EXPECT_FALSE(PerfCounters::Create({}).IsValid());
   EXPECT_FALSE(PerfCounters::Create({""}).IsValid());
   EXPECT_FALSE(PerfCounters::Create({"not a counter name"}).IsValid());
+  EXPECT_TRUE(PerfCounters::Create(
+                  {kGenericPerfEvent1, kGenericPerfEvent2, kGenericPerfEvent3})
+                  .IsValid());
+  {
+    auto counter =
+        PerfCounters::Create({kGenericPerfEvent2, "", kGenericPerfEvent1});
+    EXPECT_TRUE(counter.IsValid());
+    EXPECT_EQ(counter.num_counters(), 2);
+    EXPECT_EQ(counter.names(), std::vector<std::string>(
+                                   {kGenericPerfEvent2, kGenericPerfEvent1}));
+  }
+  {
+    auto counter = PerfCounters::Create(
+        {kGenericPerfEvent3, "not a counter name", kGenericPerfEvent1});
+    EXPECT_TRUE(counter.IsValid());
+    EXPECT_EQ(counter.num_counters(), 2);
+    EXPECT_EQ(counter.names(), std::vector<std::string>(
+                                   {kGenericPerfEvent3, kGenericPerfEvent1}));
+  }
   {
     EXPECT_TRUE(PerfCounters::Create({kGenericPerfEvent1, kGenericPerfEvent2,
                                       kGenericPerfEvent3})
                     .IsValid());
   }
-  EXPECT_FALSE(
-      PerfCounters::Create({kGenericPerfEvent2, "", kGenericPerfEvent1})
-          .IsValid());
-  EXPECT_FALSE(PerfCounters::Create({kGenericPerfEvent3, "not a counter name",
-                                     kGenericPerfEvent1})
-                   .IsValid());
   {
-    EXPECT_TRUE(PerfCounters::Create({kGenericPerfEvent1, kGenericPerfEvent2,
-                                      kGenericPerfEvent3})
-                    .IsValid());
+    auto counter = PerfCounters::Create({kGenericPerfEvent1, kGenericPerfEvent2,
+                                         kGenericPerfEvent3,
+                                         "MISPREDICTED_BRANCH_RETIRED"});
+    EXPECT_TRUE(counter.IsValid());
+    EXPECT_EQ(counter.num_counters(), 3);
+    EXPECT_EQ(counter.names(),
+              std::vector<std::string>({kGenericPerfEvent1, kGenericPerfEvent2,
+                                        kGenericPerfEvent3}));
   }
-  EXPECT_FALSE(
-      PerfCounters::Create({kGenericPerfEvent1, kGenericPerfEvent2,
-                            kGenericPerfEvent3, "MISPREDICTED_BRANCH_RETIRED"})
-          .IsValid());
 }
 
 TEST(PerfCountersTest, Read1Counter) {
@@ -157,9 +171,9 @@ void measure(size_t threadcount, PerfCounterValues* values1,
   auto work = [&]() { BM_CHECK(do_work() > 1000); };
 
   // We need to first set up the counters, then start the threads, so the
-  // threads would inherit the counters. But later, we need to first destroy the
-  // thread pool (so all the work finishes), then measure the counters. So the
-  // scopes overlap, and we need to explicitly control the scope of the
+  // threads would inherit the counters. But later, we need to first destroy
+  // the thread pool (so all the work finishes), then measure the counters. So
+  // the scopes overlap, and we need to explicitly control the scope of the
   // threadpool.
   auto counters =
       PerfCounters::Create({kGenericPerfEvent1, kGenericPerfEvent3});
@@ -190,4 +204,55 @@ TEST(PerfCountersTest, MultiThreaded) {
   EXPECT_GE(D2[0], 1.9 * D1[0]);
   EXPECT_GE(D2[1], 1.9 * D1[1]);
 }
+
+TEST(PerfCountersTest, HardwareLimits) {
+  // The test works (i.e. causes read to fail) for the assumptions
+  // about hardware capabilities (i.e. small number (3-4) hardware
+  // counters) at this date,
+  // the same as previous test ReopenExistingCounters.
+  if (!PerfCounters::kSupported) {
+    GTEST_SKIP() << "Test skipped because libpfm is not supported.\n";
+  }
+  EXPECT_TRUE(PerfCounters::Initialize());
+
+  // Taken straight from `perf list` on x86-64
+  // Got all hardware names since these are the problematic ones
+  std::vector<std::string> counter_names{"cycles",  // leader
+                                         "instructions",
+                                         "branches",
+                                         "L1-dcache-loads",
+                                         "L1-dcache-load-misses",
+                                         "L1-dcache-prefetches",
+                                         "L1-icache-load-misses",  // leader
+                                         "L1-icache-loads",
+                                         "branch-load-misses",
+                                         "branch-loads",
+                                         "dTLB-load-misses",
+                                         "dTLB-loads",
+                                         "iTLB-load-misses",  // leader
+                                         "iTLB-loads",
+                                         "branch-instructions",
+                                         "branch-misses",
+                                         "cache-misses",
+                                         "cache-references",
+                                         "stalled-cycles-backend",  // leader
+                                         "stalled-cycles-frontend"};
+
+  // In the off-chance that some of these values are not supported,
+  // we filter them out so the test will complete without failure
+  // albeit it might not actually test the grouping on that platform
+  std::vector<std::string> valid_names;
+  for (const std::string& name : counter_names) {
+    if (PerfCounters::IsCounterSupported(name)) {
+      valid_names.push_back(name);
+    }
+  }
+  PerfCountersMeasurement counter(valid_names);
+
+  std::vector<std::pair<std::string, double>> measurements;
+
+  counter.Start();
+  EXPECT_TRUE(counter.Stop(measurements));
+}
+
 }  // namespace
