@@ -38,7 +38,7 @@ struct RunResults {
 };
 
 struct BENCHMARK_EXPORT BenchTimeType {
-  enum { ITERS, TIME } tag;
+  enum { UNSPECIFIED, ITERS, TIME } tag;
   union {
     IterationCount iters;
     double time;
@@ -51,7 +51,7 @@ BenchTimeType ParseBenchMinTime(const std::string& value);
 class BenchmarkRunner {
  public:
   BenchmarkRunner(const benchmark::internal::BenchmarkInstance& b_,
-                  benchmark::internal::PerfCountersMeasurement* pmc_,
+                  benchmark::internal::PerfCountersMeasurement* pcm_,
                   BenchmarkReporter::PerFamilyRunReports* reports_for_family);
 
   int GetNumRepeats() const { return repeats; }

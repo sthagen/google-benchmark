@@ -29,7 +29,7 @@ static_assert(arraysize(kBigSIUnits) == arraysize(kBigIECUnits),
 static_assert(arraysize(kSmallSIUnits) == arraysize(kBigSIUnits),
               "Small SI and Big SI unit arrays must be the same size");
 
-static const int64_t kUnitsSize = arraysize(kBigSIUnits);
+const int64_t kUnitsSize = arraysize(kBigSIUnits);
 
 void ToExponentAndMantissa(double val, int precision, double one_k,
                            std::string* mantissa, int64_t* exponent) {
@@ -105,7 +105,7 @@ std::string ExponentToPrefix(int64_t exponent, bool iec) {
 std::string ToBinaryStringFullySpecified(double value, int precision,
                                          Counter::OneK one_k) {
   std::string mantissa;
-  int64_t exponent;
+  int64_t exponent = 0;
   ToExponentAndMantissa(value, precision,
                         one_k == Counter::kIs1024 ? 1024.0 : 1000.0, &mantissa,
                         &exponent);
@@ -119,7 +119,7 @@ std::string StrFormatImp(const char* msg, va_list args) {
 
   // TODO(ericwf): use std::array for first attempt to avoid one memory
   // allocation guess what the size might be
-  std::array<char, 256> local_buff;
+  std::array<char, 256> local_buff = {};
 
   // 2015-10-08: vsnprintf is used instead of snd::vsnprintf due to a limitation
   // in the android-ndk
