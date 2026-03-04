@@ -11,7 +11,7 @@
 #include <sstream>
 
 #include "arraysize.h"
-#include "benchmark/benchmark.h"
+#include "benchmark/types.h"
 
 namespace benchmark {
 namespace {
@@ -142,7 +142,10 @@ std::string StrFormatImp(const char* msg, va_list args) {
   auto buff_ptr = std::unique_ptr<char[]>(new char[size]);
   // 2015-10-08: vsnprintf is used instead of snd::vsnprintf due to a limitation
   // in the android-ndk
-  vsnprintf(buff_ptr.get(), size, msg, args);
+  va_list args_cp2;
+  va_copy(args_cp2, args);
+  vsnprintf(buff_ptr.get(), size, msg, args_cp2);
+  va_end(args_cp2);
   return std::string(buff_ptr.get());
 }
 
