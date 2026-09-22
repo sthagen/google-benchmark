@@ -42,6 +42,7 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -222,47 +223,21 @@ State::State(std::string name, IterationCount max_iters,
     }
   }
 
-  // Note: The use of offsetof below is technically undefined until C++17
-  // because State is not a standard layout type. However, all compilers
-  // currently provide well-defined behavior as an extension (which is
-  // demonstrated since constexpr evaluation must diagnose all undefined
-  // behavior). However, GCC and Clang also warn about this use of offsetof,
-  // which must be suppressed.
-#if defined(__INTEL_COMPILER)
-#pragma warning push
-#pragma warning(disable : 1875)
-#elif defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-#endif
-#if defined(__NVCC__)
-#pragma nv_diagnostic push
-#pragma nv_diag_suppress 1427
-#endif
-#if defined(__NVCOMPILER)
-#pragma diagnostic push
-#pragma diag_suppress offset_in_non_POD_nonstandard
-#endif
-  // Offset tests to ensure commonly accessed data is on the first cache line.
-  const int cache_line_size = 64;
-  static_assert(
-      offsetof(State, skipped_) <= (cache_line_size - sizeof(skipped_)), "");
-#if defined(__INTEL_COMPILER)
-#pragma warning pop
-#elif defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-#if defined(__NVCC__)
-#pragma nv_diagnostic pop
-#endif
-#if defined(__NVCOMPILER)
-#pragma diagnostic pop
-#endif
+  // Ensure commonly accessed data is on the first cache line. State is not a
+  // standard-layout type, so the offset is measured on the live object.
+  //
+  // The check is enabled under NDEBUG as well: a State is constructed once per
+  // benchmark instance and thread, never inside the iteration loop.
+  BM_CHECK_ALWAYS(reinterpret_cast<const char*>(&skipped_) -
+                      reinterpret_cast<const char*>(this) <=
+                  /*cache_line_size=*/64 -
+                      static_cast<std::ptrdiff_t>(sizeof(skipped_)))
+      << "the commonly accessed members of State must fit in the first cache "
+         "line";
 }
 
-void State::PauseTiming() {
+void State::PauseTimingImpl() {
   // Add in time accumulated so far
-  BM_CHECK(started_ && !finished_ && !skipped());
   timer_->StopTimer();
   if (perf_counters_measurement_ != nullptr) {
     std::vector<std::pair<std::string, double>> measurements;
@@ -279,8 +254,7 @@ void State::PauseTiming() {
   }
 }
 
-void State::ResumeTiming() {
-  BM_CHECK(started_ && !finished_ && !skipped());
+void State::ResumeTimingImpl() {
   timer_->StartTimer();
   if (perf_counters_measurement_ != nullptr) {
     perf_counters_measurement_->Start();

@@ -850,6 +850,11 @@ BENCHMARK(BM_StringCompare)->RangeMultiplier(2)
     ->Range(1<<10, 1<<18)->Complexity([](benchmark::IterationCount n)->double{return n; });
 ```
 
+The `BigO` row reports the coefficient in the same time unit as the rest of the
+family, so a family declared with `->Unit(benchmark::kMicrosecond)` reports its
+coefficient in microseconds. The `RMS` row is a normalized quantity and is
+reported as a percentage, independent of the time unit.
+
 <a name="custom-benchmark-name" />
 
 ## Custom Benchmark Name
@@ -1341,6 +1346,11 @@ static void BM_SetInsert_With_Timer_Control(benchmark::State& state) {
 BENCHMARK(BM_SetInsert_With_Timer_Control)->Ranges({{1<<10, 8<<10}, {128, 512}});
 ```
 <!-- {% endraw %} -->
+
+Note that you can only pause the timing if the timer is actually running,
+and likewise, you can only resume the timing only if the timer is paused.
+Such invalid pause/resume calls are diagnosed if the
+user code is built without `NDEBUG`.
 
 For convenience, a `ScopedPauseTiming` class is provided to manage pausing and
 resuming timers within a scope. This is less error-prone than manually calling

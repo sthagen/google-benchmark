@@ -52,9 +52,24 @@ class BENCHMARK_EXPORT BENCHMARK_INTERNAL_CACHELINE_ALIGNED State {
 
   inline bool KeepRunningBatch(IterationCount n);
 
-  void PauseTiming();
+  // Only valid while the benchmark loop is running.
+  //
+  // Forced inline so the assertion is compiled with the caller's NDEBUG.
+  // State is exported, and MSVC otherwise calls the copy of this function
+  // inside benchmark.dll, which was built with the library's NDEBUG.
+  inline BENCHMARK_ALWAYS_INLINE void PauseTiming() {
+    assert(started_ && !finished_ && !skipped() &&
+           "PauseTiming() called outside of the benchmark loop");
+    PauseTimingImpl();
+  }
 
-  void ResumeTiming();
+  // Only valid while the benchmark loop is running. Forced inline for the
+  // same reason as PauseTiming().
+  inline BENCHMARK_ALWAYS_INLINE void ResumeTiming() {
+    assert(started_ && !finished_ && !skipped() &&
+           "ResumeTiming() called outside of the benchmark loop");
+    ResumeTimingImpl();
+  }
 
   void SkipWithMessage(const std::string& msg);
 
@@ -163,6 +178,12 @@ class BENCHMARK_EXPORT BENCHMARK_INTERNAL_CACHELINE_ALIGNED State {
   void StartKeepRunning();
   inline bool KeepRunningInternal(IterationCount n, bool is_batch);
   void FinishKeepRunning();
+
+  // The checked entry points above forward here; keeping the bodies out of
+  // line keeps the assertions with the caller, whose NDEBUG decides whether
+  // they are compiled in.
+  void PauseTimingImpl();
+  void ResumeTimingImpl();
 
   const std::string name_;
   const int thread_index_;
